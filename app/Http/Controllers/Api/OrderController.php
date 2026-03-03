@@ -19,4 +19,16 @@ class OrderController extends Controller
             'data' => $order
         ], 201);
     }
+
+    public function cancel(Order $order, OrderService $orderService): JsonResponse
+    {
+        $order = $orderService->cancel($order);
+
+        return response()->json([
+            'success' => true,
+            'data' => $order
+        ]);
+    }
+
+    
 }

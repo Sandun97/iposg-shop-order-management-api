@@ -61,4 +61,31 @@ class OrderService
 
         });
     }
+
+    public function cancel(Order $order): Order
+    {        
+        if ($order->status === OrderStatus::CANCELLED) {
+            throw ValidationException::withMessages(['status' => 'Order already cancelled']);
+        }
+
+        if ($order->status !== OrderStatus::COMPLETED) {
+            throw ValidationException::withMessages(['status' => 'Only completed orders can be cancelled']);
+        }
+
+        return DB::transaction(function () use ($order) {
+
+            foreach ($order->items as $item) {
+                $product = Product::where('id', $item->product_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $product->increment('stock', $item->qty); // Restore stock
+            }
+
+            $order->update(['status' => OrderStatus::CANCELLED]);
+
+            return $order->fresh('items');
+            
+        });
+    }
 }
