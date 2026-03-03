@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Requests\StoreOrderRequest;
 use App\Services\OrderService;
+use App\Http\Resources\OrderResource;
 
 class OrderController extends Controller
 {
@@ -30,5 +31,16 @@ class OrderController extends Controller
         ]);
     }
 
+    public function index(OrderService $orderService)
+    {
+        $orders = $orderService->list(request()->only([
+            'shop_id',
+            'status',
+            'from',
+            'to'
+        ]));
+
+        return OrderResource::collection($orders);
+    }
     
 }

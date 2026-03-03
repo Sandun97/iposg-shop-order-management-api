@@ -88,4 +88,23 @@ class OrderService
             
         });
     }
+
+    public function list(array $filters)
+    {
+        return Order::with('items')
+            ->when($filters['shop_id'] ?? null, fn ($q, $shopId) =>
+                $q->where('shop_id', $shopId)
+            )
+            ->when($filters['status'] ?? null, fn ($q, $status) =>
+                $q->where('status', $status)
+            )
+            ->when($filters['from'] ?? null, fn ($q, $from) =>
+                $q->whereDate('created_at', '>=', $from)
+            )
+            ->when($filters['to'] ?? null, fn ($q, $to) =>
+                $q->whereDate('created_at', '<=', $to)
+            )
+            ->latest()
+            ->paginate(10);
+    }
 }
