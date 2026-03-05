@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Requests\StoreOrderRequest;
 use App\Services\OrderService;
 use App\Http\Resources\OrderResource;
+use App\models\Order;
 
 class OrderController extends Controller
 {
@@ -21,17 +22,7 @@ class OrderController extends Controller
         ], 201);
     }
 
-    public function cancel(Order $order, OrderService $orderService): JsonResponse
-    {
-        $order = $orderService->cancel($order);
-
-        return response()->json([
-            'success' => true,
-            'data' => $order
-        ]);
-    }
-
-    public function index(OrderService $orderService)
+    public function show(OrderService $orderService)
     {
         $orders = $orderService->list(request()->only([
             'shop_id',
@@ -42,5 +33,21 @@ class OrderController extends Controller
 
         return OrderResource::collection($orders);
     }
-    
+
+    public function get(Order $order, OrderService $orderService)
+    {
+        $order = $orderService->get($order);
+
+        return new OrderResource($order);
+    }
+
+    public function cancel(Order $order, OrderService $orderService): JsonResponse
+    {
+        $order = $orderService->cancel($order);
+
+        return response()->json([
+            'success' => true,
+            'data' => $order
+        ]);
+    }
 }

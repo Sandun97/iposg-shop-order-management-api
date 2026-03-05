@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\models\Order;
 use App\models\Product;
-use App\Enum\OrderStatus;
+use App\Enums\OrderStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -62,6 +62,30 @@ class OrderService
         });
     }
 
+    public function list(array $filters)
+    {
+        return Order::with('items')
+            ->when($filters['shop_id'] ?? null, fn ($q, $shopId) =>
+                $q->where('shop_id', $shopId)
+            )
+            ->when($filters['status'] ?? null, fn ($q, $status) =>
+                $q->where('status', $status)
+            )
+            ->when($filters['from'] ?? null, fn ($q, $from) =>
+                $q->whereDate('created_at', '>=', $from)
+            )
+            ->when($filters['to'] ?? null, fn ($q, $to) =>
+                $q->whereDate('created_at', '<=', $to)
+            )
+            ->latest()
+            ->paginate(10);
+    }
+
+    public function get(Order $order): Order
+    {
+        return $order->load('items');
+    }
+
     public function cancel(Order $order): Order
     {        
         if ($order->status === OrderStatus::CANCELLED) {
@@ -87,24 +111,5 @@ class OrderService
             return $order->fresh('items');
             
         });
-    }
-
-    public function list(array $filters)
-    {
-        return Order::with('items')
-            ->when($filters['shop_id'] ?? null, fn ($q, $shopId) =>
-                $q->where('shop_id', $shopId)
-            )
-            ->when($filters['status'] ?? null, fn ($q, $status) =>
-                $q->where('status', $status)
-            )
-            ->when($filters['from'] ?? null, fn ($q, $from) =>
-                $q->whereDate('created_at', '>=', $from)
-            )
-            ->when($filters['to'] ?? null, fn ($q, $to) =>
-                $q->whereDate('created_at', '<=', $to)
-            )
-            ->latest()
-            ->paginate(10);
     }
 }
