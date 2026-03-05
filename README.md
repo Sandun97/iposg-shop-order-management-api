@@ -113,11 +113,16 @@ cancellation - Stock restoration
 Unit tests cover: - Business logic validation - Insufficient stock
 checks
 
-## Architecture
+## Architecture Overview (Clean Architecture)
+
+This project follows Clean Architecture principles to separate responsibilities and keep the system maintainable, testable, and scalable.
+
+The architecture separates the application into different layers:
 
 Controller → Service → Model → Database
 
-Controllers handle HTTP requests. Services contain business logic.
+Controllers handle HTTP requests. 
+Services contain business logic.
 Models interact with the database.
 
 ## Author
