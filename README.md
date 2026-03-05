@@ -1,66 +1,125 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Shop Order Management API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This project is a RESTful API built with Laravel 11 for managing shop
+orders, product stock, and reporting. It was developed as part of the
+Senior Software Engineer (Laravel) Technical Assessment.
 
-## About Laravel
+## Technology Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+-   Laravel 11
+-   PHP 8+
+-   MySQL / SQLite
+-   PHPUnit
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+-   Create orders with multiple products
+-   Reduce product stock atomically during order creation
+-   Cancel orders and restore product stock
+-   Retrieve paginated order lists with filtering
+-   Retrieve individual order details
+-   Generate a report of top-selling products
+-   Concurrency-safe stock management
+-   Unit and feature tests
 
-## Learning Laravel
+## Installation
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Clone the repository: https://github.com/Sandun97/iposg-shop-order-management-api.git
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+cd shop-order-management-api
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Install dependencies: composer install
 
-## Laravel Sponsors
+Create environment file: cp .env.example .env
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Generate application key: php artisan key:generate
 
-### Premium Partners
+Configure your database in .env
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+Example configuration:
+    DB_CONNECTION=mysql
+    DB_DATABASE=shop_order_api
+    DB_USERNAME=root
+    DB_PASSWORD=
 
-## Contributing
+Run migrations: php artisan migrate
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Seed sample data: php artisan db:seed
 
-## Code of Conduct
+Start the server: php artisan serve
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+API URL: http://127.0.0.1:8000
 
-## Security Vulnerabilities
+## API Endpoints
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Create Order
 
-## License
+POST /api/orders
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Example JSON: { "shop_id": 1, "items": \[ { "product_id": 1, "qty": 2 },
+{ "product_id": 2, "qty": 1 } \] }
+
+Behavior: - Validates input - Checks stock availability - Deducts stock
+atomically - Stores product snapshot - Calculates order total
+
+### Get Orders
+
+GET /api/orders
+
+Filters: /api/orders?shop_id=1 /api/orders?status=completed
+/api/orders?from=2026-01-01&to=2026-12-31
+
+### Get Single Order
+
+GET /api/orders/{id}
+
+### Cancel Order
+
+PATCH /api/orders/{id}/cancel
+
+Restores stock using database transactions.
+
+### Top Products Report
+
+GET /api/reports/top-products
+
+Returns the top 5 products by quantity sold.
+
+## Concurrency Handling
+
+Row-level locking is used to prevent negative stock during concurrent
+requests.
+
+Example: \$product = Product::where('id', \$item\['product_id'\])
+-\>lockForUpdate() -\>firstOrFail();
+
+## Error Handling
+
+Missing resources return:
+
+{ "message": "Resource not found" }
+
+Status code: 404
+
+## Testing
+
+Run tests:
+
+php artisan test
+
+Feature tests cover: - Order creation - Stock deduction - Order
+cancellation - Stock restoration
+
+Unit tests cover: - Business logic validation - Insufficient stock
+checks
+
+## Architecture
+
+Controller → Service → Model → Database
+
+Controllers handle HTTP requests. Services contain business logic.
+Models interact with the database.
+
+## Author
+
+Technical Assessment Submission Senior Software Engineer (Laravel)
