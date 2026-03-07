@@ -30,23 +30,23 @@ lockForUpdate()
 Example:
 
 ``` php
-    $product = Product::where('id', $item['product_id'])
-    ->lockForUpdate()
-    ->firstOrFail();
+$product = Product::where('id', $item['product_id'])
+->lockForUpdate()
+->firstOrFail();
 
-    if (!$product) {
-        throw ValidationException::withMessages(['product_id' => 'Product not found']);
-    }
+if (!$product) {
+    throw ValidationException::withMessages(['product_id' => 'Product not found']);
+}
 
-    if ($product->stock < $item['qty']) {
-        throw ValidationException::withMessages([
-            'stock' => "Insufficient stock for product : {$product->name}"
-        ]);
-    }
+if ($product->stock < $item['qty']) {
+    throw ValidationException::withMessages([
+        'stock' => "Insufficient stock for product : {$product->name}"
+    ]);
+}
 
-    $subtotal = $product->price * $item['qty']; // Calculate subtotal
+$subtotal = $product->price * $item['qty']; // Calculate subtotal
 
-    $product->decrement('stock', $item['qty']); // Reduce stock
+$product->decrement('stock', $item['qty']); // Reduce stock
 ```
 
 ### Production Strategy
@@ -90,15 +90,15 @@ ProcessPaymentJob::dispatch($payment)->onQueue('payments');
 Example job:
 
 ``` php
-    class ProcessPaymentJob implements ShouldQueue
+class ProcessPaymentJob implements ShouldQueue
+{
+    public function handle()
     {
-        public function handle()
-        {
-            DB::transaction(function () {
-                // payment logic
-            });
-        }
+        DB::transaction(function () {
+            // payment logic
+        });
     }
+}
 ```
 
 ## Idempotency
@@ -112,11 +112,11 @@ Columns: - id - event_id (unique) - event_type - payload - processed_at
 Check before processing:
 
 ``` php
-    $exists = WebhookEvent::where('event_id', $eventId)->exists();
+$exists = WebhookEvent::where('event_id', $eventId)->exists();
 
-    if ($exists) {
-        return response()->json(['status' => 'already processed']);
-    }
+if ($exists) {
+    return response()->json(['status' => 'already processed']);
+}
 ```
 
 If exists → skip processing.
@@ -132,21 +132,21 @@ refunds table: - gateway_refund_id (unique)
 ### Transaction Lock
 
 ``` php
-    DB::transaction(function () {
+DB::transaction(function () {
 
-        $payment = Payment::where('transaction_id', $txId)
-            ->lockForUpdate()
-            ->first();
+    $payment = Payment::where('transaction_id', $txId)
+        ->lockForUpdate()
+        ->first();
 
-        if ($payment->status === 'completed') {
-            return;
-        }
+    if ($payment->status === 'completed') {
+        return;
+    }
 
-        $payment->update([
-            'status' => 'completed'
-        ]);
+    $payment->update([
+        'status' => 'completed'
+    ]);
 
-    });
+});
 ```
 
 ## Webhook Validation
@@ -158,11 +158,11 @@ refunds table: - gateway_refund_id (unique)
 ## Retry Strategy
 
 ``` php
-    class ProcessPaymentJob implements ShouldQueue
-    {
-        public $tries = 5;
-        public $backoff = [10, 30, 60];
-    }
+class ProcessPaymentJob implements ShouldQueue
+{
+    public $tries = 5;
+    public $backoff = [10, 30, 60];
+}
 ```
 
 Retries occur after 10s, 30s, and 60s.
