@@ -1,300 +1,160 @@
+# Architecture & Concurrency Handling
 
-🐞 Part 2 – Debug & Concurrency Problem
+## Part 2 -- Debug & Concurrency Problem
 
-Problem:
-When two users place an order for the same product at the same time, stock sometimes becomes negative.
+### Problem
 
-Tasks:
+When two users place an order for the same product at the same time, the
+product stock can sometimes become negative.
 
-1. Explain the root cause.
+### Root Cause
 
-When multiple users place orders for the same product at the same time, a race condition can occur.
-This happens when two or more requests read the same stock value before any of them updates it.
+This issue occurs due to a race condition where multiple requests read
+and update the same stock value simultaneously.
 
-Example scenario:
+Example: Product stock = 5\
+Order A qty = 3\
+Order B qty = 3
 
-Product stock = 5
-Order A requests qty = 3
-Order B requests qty = 3
+Execution: 1. Request A reads stock = 5 2. Request B reads stock = 5 3.
+Request A updates stock → 5 - 3 = 2 4. Request B updates stock → 5 - 3 =
+-1
 
-Execution order:
+Result: Stock becomes negative.
 
-Request A reads stock = 5
-Request B reads stock = 5
-Request A deducts stock → 5 - 3 = 2
-Request B deducts stock → 5 - 3 = -1
+### Fix Implemented
 
-As a result, the product stock becomes negative, which is an incorrect state.
+To prevent this issue: - Database transactions - Row-level locking using
+lockForUpdate()
 
-This issue occurs because the database operations are not synchronized between concurrent requests.
+Example:
 
-2. Implement a fix.
+\$product = Product::where('id', \$item\['product_id'\])
+-\>lockForUpdate() -\>firstOrFail();
 
-To solve this issue, the order creation process uses:
-    - Database transactions
-    - Row-level locking
+if (\$product-\>stock \< \$item\['qty'\]) { throw
+ValidationException::withMessages(\[ 'stock' =\> "Insufficient stock"
+\]); }
 
-3. Show how you would prevent this in production.
-    - Start a database transaction.
-    - Lock the product row using lockForUpdate().
-    - Validate stock availability inside the transaction.
-    - Deduct stock only after acquiring the lock.
+\$product-\>decrement('stock', \$item\['qty'\]);
 
-Sample Implementation:
+### Production Strategy
 
-    $product = Product::where('id', $item['product_id'])
-    ->lockForUpdate()
-    ->firstOrFail();
+1.  Start DB transaction
+2.  Lock product row
+3.  Validate stock inside transaction
+4.  Deduct stock safely
 
-    if (!$product) {
-        throw ValidationException::withMessages(['product_id' => 'Product not found']);
+### Test Case
+
+Product stock = 2
+
+Order 1 qty = 2 → success\
+Order 2 qty = 2 → fails
+
+Feature tests created: - ConcurrencyStockTest - ParallelOrderTest
+
+These tests simulate concurrent order requests and confirm that stock
+cannot become negative.
+
+------------------------------------------------------------------------
+
+# Part 3 -- Architecture & Design
+
+## Queue Structure
+
+  Queue           Purpose
+  --------------- --------------------
+  payments        Payment processing
+  refunds         Refund processing
+  webhooks        Webhook handling
+  notifications   Email/SMS sending
+
+Example dispatch:
+
+ProcessPaymentJob::dispatch(\$payment)-\>onQueue('payments');
+
+Example job:
+
+class ProcessPaymentJob implements ShouldQueue { public function
+handle() { DB::transaction(function () { // payment logic }); } }
+
+## Idempotency
+
+Webhook events are stored to ensure they are processed only once.
+
+Table: webhook_events
+
+Columns: - id - event_id (unique) - event_type - payload - processed_at
+
+Check before processing:
+
+\$exists = WebhookEvent::where('event_id', \$eventId)-\>exists();
+
+If exists → skip processing.
+
+## Prevent Duplicate Processing
+
+### Database Unique Constraints
+
+payments table: - gateway_transaction_id (unique)
+
+refunds table: - gateway_refund_id (unique)
+
+### Transaction Lock
+
+DB::transaction(function () {
+
+    $payment = Payment::where('transaction_id', $txId)
+        ->lockForUpdate()
+        ->first();
+
+    if ($payment->status === 'completed') {
+        return;
     }
 
-    if ($product->stock < $item['qty']) {
-        throw ValidationException::withMessages([
-            'stock' => "Insufficient stock for product : {$product->name}"
-        ]);
-    }
-
-    $subtotal = $product->price * $item['qty']; // Calculate subtotal
-
-    $product->decrement('stock', $item['qty']); // Reduce stock
-
-4. Add a test case (if possible) to simulate or demonstrate the fix.
-
-A test case was implemented to simulate the scenario where two orders attempt to purchase the same product with limited stock.
-
-test case example :
-    1. Product stock = 2
-    2. First order requests qty = 2 --> succeeds
-    3. Second order requests qty = 2 --> fails due to insufficient stock
-
-This verifies that stock cannot become negative even when multiple requests are processed.
-
-More : 
-
-I implemented an additional feature test called ConcurrencyStockTest and ParallelOrderTest to simulate concurrent order requests. 
-The test verifies that only one order succeeds when stock is limited, confirming that the transaction and row-level locking mechanism prevents negative stock under concurrent access.
-
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-🏗️ Part 3 – Architecture & Design Question
-
-Scenario:
-You need to support asynchronous Payments and Refunds using webhooks and background jobs.
-
-1. How you would structure queues in Laravel
-
-Laravel queues will be used to process payments and refunds asynchronously.
-
-Separate queues should be created for different workloads.
-
-| Queue Name      | Purpose                                 |
-| --------------- | --------------------------------------- |
-| `payments`      | Process payment confirmation            |
-| `refunds`       | Handle refund requests                  |
-| `webhooks`      | Process incoming gateway webhook events |
-| `notifications` | Send email/SMS notifications            |
-
-Example job dispatch:
-
-ProcessPaymentJob::dispatch($payment)->onQueue('payments');
-ProcessRefundJob::dispatch($refund)->onQueue('refunds');
-
-Example Job:
-
-    class ProcessPaymentJob implements ShouldQueue
-    {
-        public function handle()
-        {
-            DB::transaction(function () {
-                // payment logic
-            });
-        }
-    }
-
-2. How to implement idempotency
-
-Use a unique idempotency key provided by the payment gateway.
-
-Example Table:
-
-webhook_events
---------------------------
-id
-event_id (unique)
-event_type
-payload
-processed_at
-created_at
-
-Before processing a webhook:
-
-    $exists = WebhookEvent::where('event_id', $eventId)->exists();
-
-    if ($exists) {
-        return response()->json(['status' => 'already processed']);
-    }
-
-After processing:
-
-    WebhookEvent::create([
-        'event_id' => $eventId,
-        'payload' => json_encode($payload),
-        'processed_at' => now()
+    $payment->update([
+        'status' => 'completed'
     ]);
 
-This ensures exactly-once processing.
+});
 
-4. How to prevent duplicate processing
+## Webhook Validation
 
-Duplicate processing can happen when:
-    - Multiple webhook deliveries
-    - Concurrent workers
-    - Network retries
+1.  Verify gateway signature
+2.  Use HTTPS endpoints
+3.  Validate payload structure
 
-Several strategies to prevent:
+## Retry Strategy
 
-    1. Database Unique Constraints
+class ProcessPaymentJob implements ShouldQueue { public \$tries = 5;
+public \$backoff = \[10,30,60\]; }
 
-Example:
+Retries occur after 10s, 30s, and 60s.
 
-payments table
-----------------------
-id
-gateway_transaction_id (unique)
-order_id
+## Failed Job Handling
+
+Commands:
+
+php artisan queue:failed-table php artisan migrate
+
+Retry failed job:
+
+php artisan queue:retry {id}
+
+Monitoring tools: - Laravel Horizon - Sentry - Slack Alerts
+
+## Database Schema
+
+Payments: - id - order_id - gateway_transaction_id (unique) - amount -
+currency - status
+
+Refunds: - id - payment_id - gateway_refund_id (unique) - amount -
 status
-amount
 
-This prevents duplicate payment records.
-
-    2. Database Transactions
-
-apply DB::transaction to prevent transection curruption and lockForUpdate() prevents race conditions when multiple workers try to update the same record.
-
-Example:
-
-    DB::transaction(function () {
-        $payment = Payment::where('transaction_id', $txId)
-            ->lockForUpdate()
-            ->first();
-
-        if ($payment->status === 'completed') {
-            return;
-        }
-
-        $payment->update([
-            'status' => 'completed'
-        ]);
-    });
-
-
-5. Webhook validation strategy
-
-    1.Verify Signature - check X-Signature
-    2.Validate Source - Use HTTPS
-    3.Validate Payload Structure
-
-6. Retry strategy
-
-Queue jobs may fail due to temporary issues such as:
-
-    1.Network errors
-    2.Payment gateway downtime
-    3.Database locks
-
-Example job configuration:
-
-    class ProcessPaymentJob implements ShouldQueue
-    {
-        public $tries = 5;
-        public $backoff = [10, 30, 60];
-    }
-
-Meaning:
-
-Retry 1 -> after 10 seconds
-Retry 2 -> after 30 seconds
-Retry 3 -> after 60 seconds
-
-If the job continues failing, it will be marked as failed.
-
-7. Dead-letter or failure handling
-
-Failed jobs should not be lost.
-
-Migration example:
-
-php artisan queue:failed-table
-php artisan migrate
-
-When a job fails:
-    - It is stored in failed_jobs
-    - Can be inspected and retried
-
-Example retry command:
-    php artisan queue:retry {id}
-
-For production monitoring:
-
-Recommended tools:
-    - Laravel Horizon
-    - Sentry
-    - Slack alerts
-
-Example failed job handler:
-
-    public function failed(Exception $exception)
-    {
-        Log::error('Payment job failed', [
-            'payment_id' => $this->paymentId,
-            'error' => $exception->getMessage()
-        ]);
-    }
-
-8. Database schema considerations
-
-Payments Table:
-
-payments
-----------------------
-id
-order_id
-gateway_transaction_id (unique)
-amount
-currency
-status
-created_at
-updated_at
-
-Refunds Table:
-
-refunds
-----------------------
-id
-payment_id
-gateway_refund_id (unique)
-amount
-status
-created_at
-updated_at
-
-Webhook Events Table:
-
-webhook_events
-----------------------
-id
-event_id (unique)
-event_type
-payload
+Webhook Events: - id - event_id (unique) - event_type - payload -
 processed_at
-created_at
 
-Important Indexes:
-
-unique(gateway_transaction_id)
-unique(gateway_refund_id)
+Indexes: unique(gateway_transaction_id)\
+unique(gateway_refund_id)\
 unique(event_id)
-
-Indexes improve performance when checking duplicates.
